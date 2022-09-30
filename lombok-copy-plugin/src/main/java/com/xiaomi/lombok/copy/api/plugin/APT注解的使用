@@ -1,0 +1,164 @@
+TreeMaker介绍
+TreeMaker用于创建一系列的语法树节点，我们上面说了创建JCTree不能直接使用new关键字来创建，所以Java为我们提供了一个工具，就是TreeMaker，它会在创建时为我们创建的JCTree对象设置pos字段，所以必须使用上下文相关的TreeMaker对象来创建语法树节点。
+
+具体的API介绍可以参照，TreeMakerAPI，接下来着重介绍一下常用的几个方法。
+
+TreeMaker.Modifiers
+TreeMaker.Modifiers方法用于创建访问标志语法树节点(JCModifiers)，源码如下
+
+ 1public JCModifiers Modifiers(long flags) { 2    return Modifiers(flags, List.nil()); 3} 4 5public JCModifiers Modifiers(long flags, 6    List annotations) { 7        JCModifiers tree = new JCModifiers(flags, annotations); 8        boolean noFlags = (flags & (Flags.ModifierFlags | Flags.ANNOTATION)) == 0; 9        tree.pos = (noFlags && annotations.isEmpty()) ? Position.NOPOS : pos;10        return tree;11}
+flags：访问标志
+annotations：注解列表
+其中flags可以使用枚举类com.sun.tools.javac.code.Flags来表示，例如我们可以这样用，就生成了下面的访问标志了。
+
+1treeMaker.Modifiers(Flags.PUBLIC + Flags.STATIC + Flags.FINAL);23public static final
+TreeMaker.ClassDef
+TreeMaker.ClassDef用于创建类定义语法树节点(JCClassDecl),源码如下：
+
+ 1public JCClassDecl ClassDef(JCModifiers mods, 2    Name name, 3    List typarams, 4    JCExpression extending, 5    List implementing, 6    List defs) { 7        JCClassDecl tree = new JCClassDecl(mods, 8                                     name, 9                                     typarams,10                                     extending,11                                     implementing,12                                     defs,13                                     null);14        tree.pos = pos;15        return tree;16}
+mods：访问标志，可以通过TreeMaker.Modifiers来创建
+name：类名
+typarams：泛型参数列表
+extending：父类
+implementing：实现的接口
+defs：类定义的详细语句，包括字段、方法的定义等等
+TreeMaker.MethodDef
+TreeMaker.MethodDef用于创建方法定义语法树节点(JCMethodDecl)，源码如下
+
+ 1public JCMethodDecl MethodDef(JCModifiers mods, 2    Name name, 3    JCExpression restype, 4    List typarams, 5    List params, 6    List thrown, 7    JCBlock body, 8    JCExpression defaultValue) { 9        JCMethodDecl tree = new JCMethodDecl(mods,10                                       name,11                                       restype,12                                       typarams,13                                       params,14                                       thrown,15                                       body,16                                       defaultValue,17                                       null);18        tree.pos = pos;19        return tree;20}2122public JCMethodDecl MethodDef(MethodSymbol m,23    Type mtype,24    JCBlock body) {25        return (JCMethodDecl)26            new JCMethodDecl(27                Modifiers(m.flags(), Annotations(m.getAnnotationMirrors())),28                m.name,29                Type(mtype.getReturnType()),30                TypeParams(mtype.getTypeArguments()),31                Params(mtype.getParameterTypes(), m),32                Types(mtype.getThrownTypes()),33                body,34                null,35                m).setPos(pos).setType(mtype);36}
+mods：访问标志
+name：方法名
+restype：返回类型
+typarams：泛型参数列表
+params：参数列表
+thrown：异常声明列表
+body：方法体
+defaultValue：默认方法(可能是interface中的哪个default)
+m：方法符号
+mtype：方法类型。包含多种类型，泛型参数类型、方法参数类型、异常参数类型、返回参数类型。
+返回类型restype填写null或者treeMaker.TypeIdent(TypeTag.VOID)都代表返回void类型
+
+TreeMaker.VarDef
+TreeMaker.VarDef用于创建字段/变量定义语法树节点(JCVariableDecl)，源码如下
+
+ 1public JCVariableDecl VarDef(JCModifiers mods, 2    Name name, 3    JCExpression vartype, 4    JCExpression init) { 5        JCVariableDecl tree = new JCVariableDecl(mods, name, vartype, init, null); 6        tree.pos = pos; 7        return tree; 8} 910public JCVariableDecl VarDef(VarSymbol v,11    JCExpression init) {12        return (JCVariableDecl)13            new JCVariableDecl(14                Modifiers(v.flags(), Annotations(v.getAnnotationMirrors())),15                v.name,16                Type(v.type),17                init,18                v).setPos(pos).setType(v.type);19}
+mods：访问标志
+name：参数名称
+vartype：类型
+init：初始化语句
+v：变量符号
+TreeMaker.Ident
+TreeMaker.Ident用于创建标识符语法树节点(JCIdent)，源码如下
+
+ 1public JCIdent Ident(Name name) { 2        JCIdent tree = new JCIdent(name, null); 3        tree.pos = pos; 4        return tree; 5} 6 7public JCIdent Ident(Symbol sym) { 8        return (JCIdent)new JCIdent((sym.name != names.empty) 9                                ? sym.name10                                : sym.flatName(), sym)11            .setPos(pos)12            .setType(sym.type);13}1415public JCExpression Ident(JCVariableDecl param) {16        return Ident(param.sym);17}
+TreeMaker.Return
+TreeMaker.Return用于创建return语句(JCReturn)，源码如下
+
+1public JCReturn Return(JCExpression expr) {2        JCReturn tree = new JCReturn(expr);3        tree.pos = pos;4        return tree;5}
+TreeMaker.Select
+TreeMaker.Select用于创建域访问/方法访问(这里的方法访问只是取到名字，方法的调用需要用TreeMaker.Apply)语法树节点(JCFieldAccess)，源码如下
+
+ 1public JCFieldAccess Select(JCExpression selected, 2    Name selector)  3{ 4        JCFieldAccess tree = new JCFieldAccess(selected, selector, null); 5        tree.pos = pos; 6        return tree; 7} 8 9public JCExpression Select(JCExpression base,10    Symbol sym) {11        return new JCFieldAccess(base, sym.name, sym).setPos(pos).setType(sym.type);12}
+selected：.运算符左边的表达式
+selector：.运算符右边的表达式
+下面给出一个例子，一语句生成的Java语句就是二语句
+
+1一. TreeMaker.Select(treeMaker.Ident(names.fromString("this")), names.fromString("name"));23二. this.name
+TreeMaker.NewClass
+TreeMaker.NewClass用于创建new语句语法树节点(JCNewClass),源码如下：
+
+1public JCNewClass NewClass(JCExpression encl,2    List typeargs,3    JCExpression clazz,4    List args,5    JCClassDecl def) {6        JCNewClass tree = new JCNewClass(encl, typeargs, clazz, args, def);7        tree.pos = pos;8        return tree;9}
+encl：不太明白此参数的含义，我看很多例子中此参数都设置为null
+typeargs：参数类型列表
+clazz：待创建对象的类型
+args：参数列表
+def：类定义
+TreeMaker.Apply
+TreeMaker.Apply用于创建方法调用语法树节点(JCMethodInvocation)，源码如下：
+
+1public JCMethodInvocation Apply(List typeargs,2    JCExpression fn,3    List args) {4        JCMethodInvocation tree = new JCMethodInvocation(typeargs, fn, args);5        tree.pos = pos;6        return tree;7}
+typeargs：参数类型列表
+fn：调用语句
+args：参数列表
+TreeMaker.Assign
+TreeMaker.Assign用户创建赋值语句语法树节点(JCAssign)，源码如下：
+
+1ublic JCAssign Assign(JCExpression lhs,2    JCExpression rhs) {3        JCAssign tree = new JCAssign(lhs, rhs);4        tree.pos = pos;5        return tree;6}
+lhs：赋值语句左边表达式
+rhs：赋值语句右边表达式
+TreeMaker.Exec
+TreeMaker.Exec用于创建可执行语句语法树节点(JCExpressionStatement)，源码如下：
+
+1public JCExpressionStatement Exec(JCExpression expr) {2        JCExpressionStatement tree = new JCExpressionStatement(expr);3        tree.pos = pos;4        return tree;5}
+TreeMaker.Apply以及TreeMaker.Assign就需要外面包一层TreeMaker.Exec来获得一个JCExpressionStatement
+
+TreeMaker.Block
+TreeMaker.Block用于创建组合语句的语法树节点(JCBlock)，源码如下：
+
+1public JCBlock Block(long flags,2    List stats) {3        JCBlock tree = new JCBlock(flags, stats);4        tree.pos = pos;5        return tree;6}
+flags：访问标志
+stats：语句列表
+com.sun.tools.javac.util.List介绍
+在我们操作抽象语法树的时候，有时会涉及到关于List的操作，但是这个List不是我们经常使用的java.util.List而是com.sun.tools.javac.util.List，这个List比较奇怪，是一个链式的结构，有头结点和尾节点，但是只有尾节点是一个List，这里作为了解就行了。
+
+ 1public class List extends AbstractCollection implements java.util.List { 2    public A head; 3    public List tail; 4    private static final List> EMPTY_LIST = new List((Object)null, (List)null) { 5        public List setTail(List var1) { 6            throw new UnsupportedOperationException(); 7        } 8 9        public boolean isEmpty() {10            return true;11        }12    };1314    List(A head, List tail) {15        this.tail = tail;16        this.head = head;17    }1819    public static  List nil() {20        return EMPTY_LIST;21    }2223    public List prepend(A var1) {24        return new List(var1, this);25    }2627    public List append(A var1) {28        return of(var1).prependList(this);29    }3031    public static  List of(A var0) {32        return new List(var0, nil());33    }3435    public static  List of(A var0, A var1) {36        return new List(var0, of(var1));37    }3839    public static  List of(A var0, A var1, A var2) {40        return new List(var0, of(var1, var2));41    }4243    public static  List of(A var0, A var1, A var2, A... var3) {44        return new List(var0, new List(var1, new List(var2, from(var3))));45    }4647    ...48}
+com.sun.tools.javac.util.ListBuffer
+由于com.sun.tools.javac.util.List使用起来不方便，所以又在其上面封装了一层，这个封装类是ListBuffer，此类的操作和我们平时经常使用的java.util.List用法非常类似。
+
+ 1public class ListBuffer extends AbstractQueue { 2 3    public static  ListBuffer of(T x) { 4        ListBuffer lb = new ListBuffer(); 5        lb.add(x); 6        return lb; 7    } 8 9    /** The list of elements of this buffer.10     */11    private List elems;1213    /** A pointer pointing to the last element of 'elems' containing data,14     *  or null if the list is empty.15     */16    private List last;1718    /** The number of element in this buffer.19     */20    private int count;2122    /** Has a list been created from this buffer yet?23     */24    private boolean shared;2526    /** Create a new initially empty list buffer.27     */28    public ListBuffer() {29        clear();30    }3132    /** Append an element to buffer.33     */34    public ListBuffer append(A x) {35        x.getClass(); // null check36        if (shared) copy();37        List newLast = List.of(x);38        if (last != null) {39            last.tail = newLast;40            last = newLast;41        } else {42            elems = last = newLast;43        }44        count++;45        return this;46    }47    ........48}
+com.sun.tools.javac.util.Names介绍
+这个是为我们创建名称的一个工具类，无论是类、方法、参数的名称都需要通过此类来创建。它里面经常被使用到的一个方法就是fromString()，一般使用方法如下所示。
+
+1Names names  = new Names()2names. fromString("setName");
+实战演练
+上面我们大概了解了如何操作抽象语法树，接下来我们就来写几个真实的案例加深理解。
+
+变量相关
+在类中我们经常操作的参数就是变量，那么如何使用抽象语法树的特性为我们操作变量呢？接下来我们就将一些对于变量的一些操作。
+
+生成变量
+例如生成private String age;这样一个变量，借用我们上面讲的VarDef方法
+
+1// 生成参数 例如：private String age;2treeMaker.VarDef(treeMaker.Modifiers(Flags.PRIVATE), names.fromString("age"), treeMaker.Ident(names.fromString("String")), null);
+对变量赋值
+例如我们想生成private String name = "BuXueWuShu"，还是利用VarDef方法
+
+1// private String name = "BuXueWuShu"2treeMaker.VarDef(treeMaker.Modifiers(Flags.PRIVATE),names.fromString("name"),treeMaker.Ident(names.fromString("String")),treeMaker.Literal("BuXueWuShu"))
+两个字面量相加
+例如我们生成String add = "a" + "b";，借用我们上面讲的Exec方法和Assign方法
+
+1// add = "a"+"b"2treeMaker.Exec(treeMaker.Assign(treeMaker.Ident(names.fromString("add")),treeMaker.Binary(JCTree.Tag.PLUS,treeMaker.Literal("a"),treeMaker.Literal("b"))))
++=语法
+例如我们想生成add += "test"，则和上面字面量差不多。
+
+1// add+="test"2treeMaker.Exec(treeMaker.Assignop(JCTree.Tag.PLUS_ASG, treeMaker.Ident(names.fromString("add")), treeMaker.Literal("test")))
+++语法
+例如想生成++i
+
+1treeMaker.Exec(treeMaker.Unary(JCTree.Tag.PREINC,treeMaker.Ident(names.fromString("i"))))
+方法相关
+我们对于变量进行了操作，那么基本上都是要生成方法的，那么如何对方法进行生成和操作呢？我们接下来演示一下关于方法相关的操作方法。
+
+无参无返回值
+我们可以利用上面讲到的MethodDef方法进行生成
+
+ 1/* 2    无参无返回值的方法生成 3    public void test(){ 4 5    } 6 */ 7// 定义方法体 8ListBuffer testStatement = new ListBuffer<>(); 9JCTree.JCBlock testBody = treeMaker.Block(0, testStatement.toList());1011JCTree.JCMethodDecl test = treeMaker.MethodDef(12        treeMaker.Modifiers(Flags.PUBLIC), // 方法限定值13        names.fromString("test"), // 方法名14        treeMaker.Type(new Type.JCVoidType()), // 返回类型15        com.sun.tools.javac.util.List.nil(),16        com.sun.tools.javac.util.List.nil(),17        com.sun.tools.javac.util.List.nil(),18        testBody,    // 方法体19        null20);
+有参无返回值
+我们可以利用上面讲到的MethodDef方法进行生成
+
+ 1/* 2    无参无返回值的方法生成 3    public void test2(String name){ 4        name = "xxxx"; 5    } 6 */ 7ListBuffer testStatement2 = new ListBuffer<>(); 8testStatement2.append(treeMaker.Exec(treeMaker.Assign(treeMaker.Ident(names.fromString("name")),treeMaker.Literal("xxxx")))); 9JCTree.JCBlock testBody2 = treeMaker.Block(0, testStatement2.toList());1011// 生成入参12JCTree.JCVariableDecl param = treeMaker.VarDef(treeMaker.Modifiers(Flags.PARAMETER), names.fromString("name"),treeMaker.Ident(names.fromString("String")), null);13com.sun.tools.javac.util.List parameters = com.sun.tools.javac.util.List.of(param);1415JCTree.JCMethodDecl test2 = treeMaker.MethodDef(16        treeMaker.Modifiers(Flags.PUBLIC), // 方法限定值17        names.fromString("test2"), // 方法名18        treeMaker.Type(new Type.JCVoidType()), // 返回类型19        com.sun.tools.javac.util.List.nil(),20        parameters, // 入参21        com.sun.tools.javac.util.List.nil(),22        testBody2,23        null24);
+有参有返回值
+ 1 /* 2    有参有返回值 3    public String test3(String name){ 4       return name; 5    } 6 */ 7 8ListBuffer testStatement3 = new ListBuffer<>(); 9testStatement3.append(treeMaker.Return(treeMaker.Ident(names.fromString("name"))));10JCTree.JCBlock testBody3 = treeMaker.Block(0, testStatement3.toList());1112// 生成入参13JCTree.JCVariableDecl param3 = treeMaker.VarDef(treeMaker.Modifiers(Flags.PARAMETER), names.fromString("name"),treeMaker.Ident(names.fromString("String")), null);14com.sun.tools.javac.util.List parameters3 = com.sun.tools.javac.util.List.of(param3);1516JCTree.JCMethodDecl test3 = treeMaker.MethodDef(17        treeMaker.Modifiers(Flags.PUBLIC), // 方法限定值18        names.fromString("test4"), // 方法名19        treeMaker.Ident(names.fromString("String")), // 返回类型20        com.sun.tools.javac.util.List.nil(),21        parameters3, // 入参22        com.sun.tools.javac.util.List.nil(),23        testBody3,24        null25);
+特殊的
+我们学完了如何进行定义参数，如何进行定义方法，其实还有好多语句需要学习，例如如何生成new语句，如何生成方法调用的语句，如何生成if语句。j接下来我们就学习一些比较特殊的语法。
+
+new一个对象
+ 1// 创建一个new语句 CombatJCTreeMain combatJCTreeMain = new CombatJCTreeMain(); 2JCTree.JCNewClass combatJCTreeMain = treeMaker.NewClass( 3        null, 4        com.sun.tools.javac.util.List.nil(), 5        treeMaker.Ident(names.fromString("CombatJCTreeMain")), 6        com.sun.tools.javac.util.List.nil(), 7        null 8); 9JCTree.JCVariableDecl jcVariableDecl1 = treeMaker.VarDef(10        treeMaker.Modifiers(Flags.PARAMETER),11        names.fromString("combatJCTreeMain"),12        treeMaker.Ident(names.fromString("CombatJCTreeMain")),13        combatJCTreeMain14);
+方法调用(无参)
+ 1JCTree.JCExpressionStatement exec = treeMaker.Exec( 2        treeMaker.Apply( 3                com.sun.tools.javac.util.List.nil(), 4                treeMaker.Select( 5                        treeMaker.Ident(names.fromString("combatJCTreeMain")), // . 左边的内容 6                        names.fromString("test") // . 右边的内容 7                ), 8                com.sun.tools.javac.util.List.nil() 9        )10);
+方法调用(有参)
+ 1// 创建一个方法调用 combatJCTreeMain.test2("hello world!"); 2JCTree.JCExpressionStatement exec2 = treeMaker.Exec( 3        treeMaker.Apply( 4                com.sun.tools.javac.util.List.nil(), 5                treeMaker.Select( 6                        treeMaker.Ident(names.fromString("combatJCTreeMain")), // . 左边的内容 7                        names.fromString("test2") // . 右边的内容 8                ), 9                com.sun.tools.javac.util.List.of(treeMaker.Literal("hello world!")) // 方法中的内容10        )11);
+if语句
+ 1/* 2    创建一个if语句 3    if("BuXueWuShu".equals(name)){ 4        add = "a" + "b"; 5    }else{ 6        add += "test"; 7    } 8 */ 9// "BuXueWuShu".equals(name)10JCTree.JCMethodInvocation apply = treeMaker.Apply(11        com.sun.tools.javac.util.List.nil(),12        treeMaker.Select(13                treeMaker.Literal("BuXueWuShu"), // . 左边的内容14                names.fromString("equals") // . 右边的内容15        ),16        com.sun.tools.javac.util.List.of(treeMaker.Ident(names.fromString("name")))17);18//  add = "a" + "b"19JCTree.JCExpressionStatement exec3 = treeMaker.Exec(treeMaker.Assign(treeMaker.Ident(names.fromString("add")), treeMaker.Binary(JCTree.Tag.PLUS, treeMaker.Literal("a"), treeMaker.Literal("b"))));20//  add += "test"21JCTree.JCExpressionStatement exec1 = treeMaker.Exec(treeMaker.Assignop(JCTree.Tag.PLUS_ASG, treeMaker.Ident(names.fromString("add")), treeMaker.Literal("test")));2223JCTree.JCIf anIf = treeMaker.If(24        apply, // if语句里面的判断语句25        exec3, // 条件成立的语句26        exec1  // 条件不成立的语句27);
+总结
+纸上得来终觉浅，绝知此事要躬行。希望大家看完此篇文章能够自己在本机上自己试验一下。自己设置几个参数，自己学的Lombok学着生成一下get、set方法，虽然本篇知识在日常开发中基本上不会用到，但是万一用到了这些知识那么别人不会而你会，差距其实就慢慢的给拉开了。
