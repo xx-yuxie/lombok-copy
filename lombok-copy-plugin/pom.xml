@@ -10,10 +10,8 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>com.xiaomi.plugin</groupId>
     <artifactId>lombok-copy-plugin</artifactId>
     <version>1.0-SNAPSHOT</version>
-
     <build>
         <plugins>
             <plugin>
